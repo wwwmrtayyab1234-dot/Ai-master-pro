@@ -1,0 +1,10 @@
+flet==0.85.3
+flet-cli==0.85.3
+flet-desktop==0.85.3; platform_system == "Windows"
+flet-audio==0.85.3
+flet-audio-recorder==0.85.3
+flet-secure-storage==0.85.3
+./extensions/flet_admob_pro
+groq==1.5.0
+python-dotenv==1.2.1
+edge-tts==7.2.8

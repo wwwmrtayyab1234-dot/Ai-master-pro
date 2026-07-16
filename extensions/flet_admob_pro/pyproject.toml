@@ -1,0 +1,30 @@
+[project]
+name = "flet-admob-pro"
+version = "0.1.0"
+description = "Native and rewarded Google Mobile Ads controls for AI Master Pro"
+requires-python = ">=3.11"
+dependencies = ["flet>=0.85.3"]
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+include-package-data = false
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["flet_admob_pro*"]
+namespaces = false
+
+[tool.setuptools.data-files]
+"flutter/flet_admob_pro" = ["src/flutter/flet_admob_pro/pubspec.yaml"]
+"flutter/flet_admob_pro/lib" = ["src/flutter/flet_admob_pro/lib/flet_admob_pro.dart"]
+"flutter/flet_admob_pro/lib/src" = [
+    "src/flutter/flet_admob_pro/lib/src/extension.dart",
+    "src/flutter/flet_admob_pro/lib/src/native.dart",
+    "src/flutter/flet_admob_pro/lib/src/rewarded.dart",
+]
+"flutter/flet_admob_pro/lib/utils" = [
+    "src/flutter/flet_admob_pro/lib/utils/ads.dart",
+]
