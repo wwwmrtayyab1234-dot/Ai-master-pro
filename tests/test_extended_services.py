@@ -341,6 +341,11 @@ class PackagingConfigurationTests(unittest.TestCase):
         self.assertIn("secrets.GROQ_API_KEY", workflow)
         self.assertIn("Verify private configuration loads", workflow)
         self.assertIn('Path(".env").unlink(missing_ok=True)', workflow)
+        self.assertIn('"GOOGLE_OAUTH_CLIENT_SECRET",', workflow)
+        self.assertLess(
+            workflow.index("- name: Build Android APK"),
+            workflow.index("- name: Clean up private configuration"),
+        )
 
     def test_release_check_accepts_complete_production_configuration(self) -> None:
         environment = {

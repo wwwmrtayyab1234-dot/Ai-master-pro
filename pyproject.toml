@@ -1,6 +1,6 @@
 [project]
 name = "ai_master_pro"
-version = "0.9.5"
+version = "0.9.6"
 description = "All-in-one AI studio for creators"
 requires-python = ">=3.11"
 dependencies = [
@@ -18,7 +18,7 @@ dependencies = [
 product = "AI Master Pro"
 org = "com.aimasterpro"
 bundle_id = "com.aimasterpro.app"
-build_number = 16
+build_number = 17
 
 [tool.flet.dev_packages]
 flet-admob-pro = "extensions/flet_admob_pro"
