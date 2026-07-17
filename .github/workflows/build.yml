@@ -1,0 +1,215 @@
+name: Build Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - ".github/workflows/build.yml"
+      - "**/*.py"
+      - "assets/**"
+      - "extensions/**"
+      - "pyproject.toml"
+      - "requirements.txt"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-apk:
+    name: Test and build APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+
+    env:
+      PYTHONUTF8: "1"
+      PYTHONUNBUFFERED: "1"
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      PUB_CACHE: ${{ runner.temp }}/pub-cache
+      GRADLE_USER_HOME: ${{ runner.temp }}/gradle
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Cache Gradle and Dart packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.GRADLE_USER_HOME }}/caches
+            ${{ env.GRADLE_USER_HOME }}/wrapper
+            ${{ env.PUB_CACHE }}
+          key: ${{ runner.os }}-android-${{ hashFiles('requirements.txt', 'pyproject.toml', 'extensions/**/pubspec.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-android-
+
+      - name: Validate required GitHub Secrets
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
+          FIREBASE_AUTH_DOMAIN: ${{ secrets.FIREBASE_AUTH_DOMAIN }}
+          FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+          FIREBASE_APP_ID: ${{ secrets.FIREBASE_APP_ID }}
+          GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+        run: |
+          python - <<'PY'
+          import os
+
+          required = (
+              "GROQ_API_KEY",
+              "GEMINI_API_KEY",
+              "ELEVENLABS_API_KEY",
+              "FIREBASE_API_KEY",
+              "FIREBASE_AUTH_DOMAIN",
+              "FIREBASE_PROJECT_ID",
+              "FIREBASE_APP_ID",
+              "GOOGLE_OAUTH_CLIENT_ID",
+              "GOOGLE_OAUTH_CLIENT_SECRET",
+          )
+          missing = [name for name in required if not os.getenv(name, "").strip()]
+          if missing:
+              raise SystemExit(
+                  "Missing GitHub Actions secrets: " + ", ".join(missing)
+              )
+          print("All required GitHub Secrets are configured.")
+          PY
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip check
+
+      - name: Run project verification
+        run: |
+          python -m compileall -q main.py config.py services tests
+          python -m unittest discover -s tests -v
+
+      - name: Create private build configuration
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
+          FIREBASE_AUTH_DOMAIN: ${{ secrets.FIREBASE_AUTH_DOMAIN }}
+          FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+          FIREBASE_APP_ID: ${{ secrets.FIREBASE_APP_ID }}
+          GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+          PRIVACY_POLICY_URL: ${{ vars.PRIVACY_POLICY_URL }}
+          APP_SHARE_URL: ${{ vars.APP_SHARE_URL }}
+          SUPPORT_EMAIL: ${{ vars.SUPPORT_EMAIL }}
+          WHATSAPP_NUMBER: ${{ vars.WHATSAPP_NUMBER }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          names = (
+              "GROQ_API_KEY",
+              "GEMINI_API_KEY",
+              "ELEVENLABS_API_KEY",
+              "FIREBASE_API_KEY",
+              "FIREBASE_AUTH_DOMAIN",
+              "FIREBASE_PROJECT_ID",
+              "FIREBASE_APP_ID",
+              "GOOGLE_OAUTH_CLIENT_ID",
+              "PRIVACY_POLICY_URL",
+              "APP_SHARE_URL",
+              "SUPPORT_EMAIL",
+              "WHATSAPP_NUMBER",
+          )
+          values = {name: os.getenv(name, "").strip() for name in names}
+          values.update(
+              {
+                  "GEMINI_MODEL": "gemini-2.5-flash",
+                  "GOOGLE_OAUTH_REDIRECT_URL": "http://localhost:8550/oauth_callback",
+                  "APP_ENV": "development",
+                  "DEV_PREMIUM_MODE": "false",
+                  "ADMOB_TEST_MODE": "true",
+              }
+          )
+          for name, value in values.items():
+              if "\n" in value or "\r" in value:
+                  raise SystemExit(f"{name} contains an invalid line break.")
+          content = "\n".join(
+              f"{name}={json.dumps(value)}" for name, value in values.items()
+          )
+          Path(".env").write_text(content + "\n", encoding="utf-8")
+          print("Private .env created without printing secret values.")
+          PY
+
+      - name: Verify private configuration loads
+        run: |
+          python - <<'PY'
+          import os
+          import config
+
+          required = (
+              "GROQ_API_KEY",
+              "GEMINI_API_KEY",
+              "ELEVENLABS_API_KEY",
+              "FIREBASE_API_KEY",
+          )
+          missing = [name for name in required if not os.getenv(name, "").strip()]
+          if missing:
+              raise SystemExit("The generated .env did not load: " + ", ".join(missing))
+          print("Build configuration loaded successfully.")
+          PY
+
+      - name: Build Android APK with Flet
+        run: flet build apk --clear-cache --yes --no-rich-output
+
+      - name: Collect APK
+        run: |
+          apk_path="$(find build -type f -name '*.apk' -print | sort | head -n 1)"
+          if [ -z "$apk_path" ]; then
+            echo "No APK was produced under the build directory."
+            exit 1
+          fi
+          mkdir -p release
+          cp "$apk_path" release/AI_Master_Pro.apk
+          echo "APK collected at release/AI_Master_Pro.apk"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AI-Master-Pro-APK-${{ github.run_number }}
+          path: release/AI_Master_Pro.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Remove temporary secrets
+        if: always()
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          Path(".env").unlink(missing_ok=True)
+          print("Temporary build configuration removed.")
+          PY
