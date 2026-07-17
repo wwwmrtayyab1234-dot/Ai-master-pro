@@ -1,0 +1,6 @@
+Metadata-Version: 2.4
+Name: flet-admob-pro
+Version: 0.1.0
+Summary: Native and rewarded Google Mobile Ads controls for AI Master Pro
+Requires-Python: >=3.11
+Requires-Dist: flet>=0.85.3

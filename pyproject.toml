@@ -1,6 +1,6 @@
 [project]
 name = "ai_master_pro"
-version = "0.9.6"
+version = "0.9.7"
 description = "All-in-one AI studio for creators"
 requires-python = ">=3.11"
 dependencies = [
@@ -18,7 +18,7 @@ dependencies = [
 product = "AI Master Pro"
 org = "com.aimasterpro"
 bundle_id = "com.aimasterpro.app"
-build_number = 17
+build_number = 18
 
 [tool.flet.dev_packages]
 flet-admob-pro = "extensions/flet_admob_pro"
@@ -63,4 +63,6 @@ allowBackup = "false"
 
 [tool.flet.splash]
 color = "#F7FAFF"
-dark_color = "#111318"
+dark_color = "#F7FAFF"
+icon_bgcolor = "#F7FAFF"
+icon_dark_bgcolor = "#F7FAFF"

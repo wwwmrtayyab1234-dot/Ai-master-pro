@@ -107,22 +107,15 @@ async def main(page: ft.Page) -> None:
     # Send the first control tree before importing optional SDKs or touching
     # storage. This dismisses Flet's native startup screen immediately even on
     # slower Android phones, while the remaining Python modules load lazily.
-    first_paint_status = ft.Text(
-        "Opening your workspace...",
-        color="#718096",
-        size=14,
-        text_align=ft.TextAlign.CENTER,
-    )
     root = ft.Container(
         content=ft.Column(
             controls=[
-                ft.Container(
-                    content=ft.Icon(ft.Icons.SMART_TOY_ROUNDED, color=WHITE, size=38),
-                    width=72,
-                    height=72,
-                    bgcolor=PRIMARY,
-                    border_radius=24,
-                    alignment=ft.Alignment.CENTER,
+                ft.Image(
+                    src="icon.png",
+                    width=176,
+                    height=176,
+                    fit=ft.BoxFit.CONTAIN,
+                    border_radius=36,
                 ),
                 ft.Text(
                     APP_NAME,
@@ -130,8 +123,12 @@ async def main(page: ft.Page) -> None:
                     size=25,
                     weight=ft.FontWeight.BOLD,
                 ),
-                ft.ProgressRing(color=PRIMARY, width=30, height=30),
-                first_paint_status,
+                ft.Text(
+                    "Your personal AI companion",
+                    color="#718096",
+                    size=14,
+                    text_align=ft.TextAlign.CENTER,
+                ),
             ],
             spacing=16,
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -1844,7 +1841,13 @@ async def main(page: ft.Page) -> None:
             controls=[
                 ft.Row(
                     controls=[
-                        ft.Icon(ft.Icons.SMART_TOY_ROUNDED, color=PRIMARY, size=25),
+                        ft.Image(
+                            src="icon.png",
+                            width=34,
+                            height=34,
+                            fit=ft.BoxFit.CONTAIN,
+                            border_radius=9,
+                        ),
                         ft.Text(APP_NAME, color=TEXT, size=18, weight=ft.FontWeight.BOLD),
                     ],
                     spacing=8,
@@ -2147,14 +2150,12 @@ async def main(page: ft.Page) -> None:
     login_card = ft.Container(
         content=ft.Column(
             controls=[
-                ft.Container(
-                    content=ft.Icon(ft.Icons.SMART_TOY_ROUNDED, color=WHITE, size=42),
-                    width=76,
-                    height=76,
-                    bgcolor=PRIMARY,
-                    border_radius=24,
-                    alignment=ft.Alignment.CENTER,
-                    shadow=ft.BoxShadow(blur_radius=24, color="#445B8DEF", offset=ft.Offset(0, 8)),
+                ft.Image(
+                    src="icon.png",
+                    width=104,
+                    height=104,
+                    fit=ft.BoxFit.CONTAIN,
+                    border_radius=26,
                 ),
                 ft.Text(
                     "Welcome to\nAI Master Pro",
@@ -2279,17 +2280,15 @@ async def main(page: ft.Page) -> None:
     startup_screen = ft.Container(
         content=ft.Column(
             controls=[
-                ft.Container(
-                    content=ft.Icon(ft.Icons.SMART_TOY_ROUNDED, color=WHITE, size=42),
-                    width=78,
-                    height=78,
-                    bgcolor=PRIMARY,
-                    border_radius=26,
-                    alignment=ft.Alignment.CENTER,
+                ft.Image(
+                    src="icon.png",
+                    width=176,
+                    height=176,
+                    fit=ft.BoxFit.CONTAIN,
+                    border_radius=36,
                 ),
                 ft.Text(APP_NAME, color="#1E2A44", size=26, weight=ft.FontWeight.BOLD),
-                ft.ProgressRing(color=PRIMARY),
-                ft.Text("Starting securely...", color="#718096"),
+                ft.Text("Your personal AI companion", color="#718096"),
             ],
             spacing=18,
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,

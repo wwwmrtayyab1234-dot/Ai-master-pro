@@ -2,6 +2,7 @@ import asyncio
 import io
 import json
 import os
+import struct
 import tempfile
 import tomllib
 import unittest
@@ -304,6 +305,26 @@ class AdServiceBoundaryTests(unittest.IsolatedAsyncioTestCase):
 
 
 class PackagingConfigurationTests(unittest.TestCase):
+    def test_brand_assets_are_valid_square_pngs_and_used_at_startup(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        for asset_name, minimum_size in (("icon.png", 1024), ("splash.png", 512)):
+            data = (root / "assets" / asset_name).read_bytes()
+            self.assertEqual(data[:8], b"\x89PNG\r\n\x1a\n")
+            width, height = struct.unpack(">II", data[16:24])
+            self.assertEqual(width, height)
+            self.assertGreaterEqual(width, minimum_size)
+
+        main_source = (root / "main.py").read_text(encoding="utf-8")
+        self.assertGreaterEqual(main_source.count('src="icon.png"'), 4)
+        first_frame = main_source.split(
+            "# Optional and provider-specific packages", maxsplit=1
+        )[0]
+        startup = main_source.split("startup_screen =", maxsplit=1)[1].split(
+            "offline_screen =", maxsplit=1
+        )[0]
+        self.assertNotIn("ProgressRing", first_frame)
+        self.assertNotIn("ProgressRing", startup)
+
     def test_android_manifest_and_dependencies(self) -> None:
         root = Path(__file__).resolve().parents[1]
         config = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
@@ -341,7 +362,8 @@ class PackagingConfigurationTests(unittest.TestCase):
         self.assertIn("secrets.GROQ_API_KEY", workflow)
         self.assertIn("Verify private configuration loads", workflow)
         self.assertIn('Path(".env").unlink(missing_ok=True)', workflow)
-        self.assertIn('"GOOGLE_OAUTH_CLIENT_SECRET",', workflow)
+        self.assertIn("secrets.GOOGLE_OAUTH_CLIENT_SECRET", workflow)
+        self.assertNotIn('"GOOGLE_OAUTH_CLIENT_SECRET",', workflow)
         self.assertLess(
             workflow.index("- name: Build Android APK"),
             workflow.index("- name: Clean up private configuration"),
@@ -360,7 +382,6 @@ class PackagingConfigurationTests(unittest.TestCase):
             "FIREBASE_PROJECT_ID": "project-id",
             "FIREBASE_APP_ID": "configured-firebase-app-id",
             "GOOGLE_OAUTH_CLIENT_ID": "configured-google-client-id",
-            "GOOGLE_OAUTH_CLIENT_SECRET": "configured-google-client-secret",
             "GOOGLE_OAUTH_REDIRECT_URL": "http://localhost:8550/oauth_callback",
             "SUPPORT_EMAIL": "support@aimasterpro.test",
             "PRIVACY_POLICY_URL": "https://aimasterpro.test/privacy",
