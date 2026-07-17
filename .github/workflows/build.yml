@@ -52,6 +52,11 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
+      # Validates that all required GitHub Secrets are configured before proceeding with the build.
+      # This prevents build failures due to missing API keys or configuration values.
+      # Required secrets: GROQ_API_KEY, GEMINI_API_KEY, ELEVENLABS_API_KEY, FIREBASE_API_KEY, 
+      # FIREBASE_AUTH_DOMAIN, FIREBASE_PROJECT_ID, FIREBASE_APP_ID, GOOGLE_OAUTH_CLIENT_ID, 
+      # GOOGLE_OAUTH_CLIENT_SECRET
       - name: Validate required secrets
         shell: bash
         run: |
@@ -72,12 +77,17 @@ jobs:
           fi
           echo "All required GitHub Secrets are configured."
 
+      # Installs all Python dependencies required for the project.
+      # Uses pip check to verify that all dependencies are compatible with each other.
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
           python -m pip check
 
+      # Creates a .env configuration file with all sensitive API keys and Firebase settings.
+      # This file is used at runtime by the application to access external services.
+      # The configuration includes Gemini model selection and OAuth redirect URL setup.
       - name: Create private build configuration
         shell: bash
         run: |
@@ -120,14 +130,25 @@ jobs:
           print("Private configuration created without printing secret values.")
           PY
 
+      # Runs all automated unit tests to verify code quality and functionality.
+      # Compiles Python files for syntax checking and discovers/runs all tests in the tests directory.
+      # This ensures the build only proceeds if all tests pass.
       - name: Run automated tests
         run: |
           python -m compileall -q main.py config.py services tests
           python -m unittest discover -s tests -v
 
+      # Builds the Android APK using Flet framework.
+      # --clear-cache: Clears the Flet build cache to ensure clean builds and prevent stale artifacts.
+      # --yes: Automatically accepts default options during the build process (no interactive prompts).
+      # --no-rich-output: Disables rich formatting for logs, providing plain text output suitable for CI/CD logs.
+      # This command must match the test expectations in test_extended_services.py
       - name: Build Android APK
         run: flet build apk --clear-cache --yes --no-rich-output
 
+      # Locates the generated APK file from the build directory and copies it to the release folder.
+      # Verifies that an APK was actually produced; fails the build if no APK is found.
+      # Renames the APK to 'AI_Master_Pro.apk' for consistent artifact naming.
       - name: Collect APK
         shell: bash
         run: |
@@ -139,6 +160,9 @@ jobs:
           mkdir -p release
           cp "$apk_path" release/AI_Master_Pro.apk
 
+      # Uploads the built APK as a GitHub Actions artifact for easy download and distribution.
+      # Artifact name includes the run number for version tracking.
+      # Retention period set to 14 days to manage storage costs while keeping recent builds available.
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
