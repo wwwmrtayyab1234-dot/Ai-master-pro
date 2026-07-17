@@ -126,7 +126,7 @@ jobs:
           python -m unittest discover -s tests -v
 
       - name: Build Android APK
-        run: flet build apk --yes --no-rich-output
+        run: flet build apk --clear-cache --yes --no-rich-output
 
       - name: Collect APK
         shell: bash
