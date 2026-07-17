@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import base64
 from datetime import datetime
@@ -5,18 +7,6 @@ from pathlib import Path
 from tempfile import gettempdir
 
 import flet as ft
-import flet_audio as fta
-from flet.auth.providers import GoogleOAuthProvider
-
-try:
-    import flet_audio_recorder as far
-except ImportError:
-    far = None
-
-try:
-    import flet_secure_storage as fss
-except ImportError:
-    fss = None
 
 from config import (
     ADS_FOR_REQUEST_REFILL,
@@ -31,30 +21,6 @@ from config import (
     SUPPORT_EMAIL,
     WHATSAPP_NUMBER,
 )
-from services.ad_service import create_native_ad, watch_rewarded_ad
-from services.crash_service import CrashProtector
-from services.database_service import open_database_resilient
-from services.error_service import friendly_error
-from services.firebase_auth_service import (
-    EmailVerificationRequired,
-    FirebaseAuthService,
-    FirebaseUser,
-    MAINTENANCE_MESSAGE,
-    OFFLINE_MESSAGE,
-    SessionExpired,
-)
-from services.gemini_service import analyze_attachment
-from services.groq_service import enhance_prompt, get_ai_reply
-from services.image_queue_service import ImageGenerationQueue
-from services.safety_service import (
-    RESTRICTED_RESPONSE,
-    is_restricted_request,
-)
-from services.session_service import SessionService
-from services.usage_service import GateResult, UsageService
-from services.voice_service import VOICE_OPTIONS, estimate_seconds, generate_voiceover
-
-
 TEXT = ft.Colors.ON_SURFACE
 MUTED = ft.Colors.ON_SURFACE_VARIANT
 BACKGROUND = ft.Colors.SURFACE
@@ -125,6 +91,87 @@ async def main(page: ft.Page) -> None:
         font_family="Arial",
     )
 
+    # Send the first control tree before importing optional SDKs or touching
+    # storage. This dismisses Flet's native startup screen immediately even on
+    # slower Android phones, while the remaining Python modules load lazily.
+    first_paint_status = ft.Text(
+        "Opening your workspace...",
+        color="#718096",
+        size=14,
+        text_align=ft.TextAlign.CENTER,
+    )
+    root = ft.Container(
+        content=ft.Column(
+            controls=[
+                ft.Container(
+                    content=ft.Icon(ft.Icons.SMART_TOY_ROUNDED, color=WHITE, size=38),
+                    width=72,
+                    height=72,
+                    bgcolor=PRIMARY,
+                    border_radius=24,
+                    alignment=ft.Alignment.CENTER,
+                ),
+                ft.Text(
+                    APP_NAME,
+                    color="#1E2A44",
+                    size=25,
+                    weight=ft.FontWeight.BOLD,
+                ),
+                ft.ProgressRing(color=PRIMARY, width=30, height=30),
+                first_paint_status,
+            ],
+            spacing=16,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            alignment=ft.MainAxisAlignment.CENTER,
+        ),
+        expand=True,
+        bgcolor="#F7FAFF",
+        alignment=ft.Alignment.CENTER,
+    )
+    page.add(root)
+    page.update()
+    await asyncio.sleep(0)
+
+    # Optional and provider-specific packages are intentionally imported only
+    # after the first frame is visible. Groq and Edge-TTS perform their own
+    # provider imports lazily on first use as well.
+    import flet_audio as fta
+    from flet.auth.providers import GoogleOAuthProvider
+
+    try:
+        import flet_audio_recorder as far
+    except ImportError:
+        far = None
+
+    try:
+        import flet_secure_storage as fss
+    except ImportError:
+        fss = None
+
+    from services.ad_service import create_native_ad, watch_rewarded_ad
+    from services.crash_service import CrashProtector
+    from services.database_service import open_database_resilient
+    from services.error_service import friendly_error
+    from services.firebase_auth_service import (
+        EmailVerificationRequired,
+        FirebaseAuthService,
+        FirebaseUser,
+        MAINTENANCE_MESSAGE,
+        OFFLINE_MESSAGE,
+        SessionExpired,
+    )
+    from services.gemini_service import analyze_attachment
+    from services.groq_service import enhance_prompt, get_ai_reply
+    from services.image_queue_service import ImageGenerationQueue
+    from services.safety_service import RESTRICTED_RESPONSE, is_restricted_request
+    from services.session_service import SessionService
+    from services.usage_service import GateResult, UsageService
+    from services.voice_service import (
+        VOICE_OPTIONS,
+        estimate_seconds,
+        generate_voiceover,
+    )
+
     file_picker = ft.FilePicker()
     share_service = ft.Share()
     connectivity = ft.Connectivity()
@@ -172,15 +219,17 @@ async def main(page: ft.Page) -> None:
     database_recovery_backup: Path | None = None
     database_recovery_mode = False
     try:
-        database, database_recovery_backup = open_database_resilient(
-            app_data_directory / "ai_master_pro.db"
+        database, database_recovery_backup = await asyncio.to_thread(
+            open_database_resilient,
+            app_data_directory / "ai_master_pro.db",
         )
     except Exception as error:
         crash_protector.capture_exception(error, "Primary local database startup failed")
         emergency_directory = Path(gettempdir()).resolve() / "ai_master_pro_recovery"
         emergency_directory.mkdir(parents=True, exist_ok=True)
-        database, database_recovery_backup = open_database_resilient(
-            emergency_directory / "ai_master_pro.db"
+        database, database_recovery_backup = await asyncio.to_thread(
+            open_database_resilient,
+            emergency_directory / "ai_master_pro.db",
         )
         database_recovery_mode = True
 
@@ -205,9 +254,6 @@ async def main(page: ft.Page) -> None:
     sidebar_open = False
     is_offline = False
     google_oauth_in_progress = False
-
-    root = ft.Container(expand=True, bgcolor=BACKGROUND)
-    page.add(root)
 
     def toast(message: str, error: bool = False) -> None:
         page.show_dialog(
@@ -2353,43 +2399,80 @@ async def main(page: ft.Page) -> None:
         root.content = maintenance_screen
         page.update()
 
+    async def probe_connectivity() -> None:
+        """Refresh the offline indicator without blocking the first screen."""
+        nonlocal is_offline
+        try:
+            states = await asyncio.wait_for(
+                connectivity.get_connectivity(), timeout=2.0
+            )
+            is_offline = bool(states and ft.ConnectivityType.NONE in states)
+            offline_banner.visible = is_offline
+            if is_offline and current_user is None:
+                show_offline()
+            else:
+                page.update()
+        except Exception:
+            # Provider requests still display their own friendly network error.
+            return
+
+    async def refresh_saved_session(saved: dict) -> None:
+        """Validate a cached login after the local workspace is already open."""
+        nonlocal current_user
+        try:
+            refreshed = await asyncio.wait_for(
+                asyncio.to_thread(
+                    firebase_auth.refresh_session,
+                    saved["refresh_token"],
+                    saved.get("email", ""),
+                ),
+                timeout=12.0,
+            )
+            if current_user is not None and current_user.uid == saved.get("uid"):
+                current_user = refreshed
+                await session_store.save(refreshed)
+        except (SessionExpired, EmailVerificationRequired):
+            if current_user is not None and current_user.uid == saved.get("uid"):
+                await logout(clear_session=True)
+                set_login_status(
+                    "Your saved session expired. Please sign in again."
+                )
+                page.update()
+        except Exception:
+            # A temporary network/provider failure must not throw the user back
+            # to login. The cached secure session remains available locally.
+            return
+
     async def bootstrap() -> None:
         show_startup()
         try:
-            states = await connectivity.get_connectivity()
-            if states and ft.ConnectivityType.NONE in states:
-                show_offline()
-                return
+            saved = await asyncio.wait_for(session_store.load(), timeout=4.0)
         except Exception:
-            pass
-
-        saved = await session_store.load()
+            saved = None
         if not saved:
             show_login()
+            page.run_task(probe_connectivity)
             return
-        try:
-            user = await asyncio.to_thread(
-                firebase_auth.refresh_session,
-                saved["refresh_token"],
-                saved.get("email", ""),
-            )
-            await finish_login(user, persist=True)
-        except SessionExpired:
+
+        # SecureStorage already proves that this device signed in previously.
+        # Restore local chats/credits immediately, then refresh the short-lived
+        # Firebase token in the background instead of blocking startup for up
+        # to the provider's network timeout.
+        cached_user = FirebaseUser(
+            uid=str(saved.get("uid", "")),
+            email=str(saved.get("email", "")),
+            id_token="",
+            refresh_token=str(saved.get("refresh_token", "")),
+            email_verified=True,
+        )
+        if not cached_user.uid or not cached_user.refresh_token:
             await session_store.clear()
             show_login()
-            set_login_status("Your saved session expired. Please sign in again.")
-            page.update()
-        except EmailVerificationRequired:
-            await session_store.clear()
-            show_login()
-            set_login_status("Verify your email, then sign in.")
-            page.update()
-        except Exception as error:
-            message = friendly_error(error)
-            if message == OFFLINE_MESSAGE:
-                show_offline()
-            else:
-                show_maintenance()
+            page.run_task(probe_connectivity)
+            return
+        await finish_login(cached_user, persist=False)
+        page.run_task(refresh_saved_session, saved)
+        page.run_task(probe_connectivity)
 
     def resize_layout(_event=None) -> None:
         width = page.width or page.window.width or 430

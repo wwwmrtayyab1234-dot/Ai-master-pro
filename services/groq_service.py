@@ -1,14 +1,15 @@
 import os
 from collections.abc import Sequence
 
-from groq import AsyncGroq
-
-
 FREE_CHAT_MODEL = "llama-3.1-8b-instant"
 PREMIUM_CHAT_MODEL = "llama-3.3-70b-versatile"
 
 
-def _client() -> AsyncGroq:
+def _client():
+    # Groq imports pydantic/httpx and is relatively expensive on Android.
+    # Defer it until the user actually sends a chat or enhances a prompt.
+    from groq import AsyncGroq
+
     api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
         raise RuntimeError("GROQ_API_KEY is missing from the .env file.")

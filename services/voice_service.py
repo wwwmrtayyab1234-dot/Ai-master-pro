@@ -5,9 +5,6 @@ import os
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-import edge_tts
-
-
 VOICE_OPTIONS = {
     "edge_male": {
         "name": "English Male — Free",
@@ -189,6 +186,11 @@ def audio_duration_seconds(audio: bytes) -> int:
 
 
 async def _edge_audio(text: str, voice_id: str) -> bytes:
+    # Edge-TTS and its networking stack are only required when voice generation
+    # starts, so importing them during app startup wastes several seconds on
+    # lower-end Android devices.
+    import edge_tts
+
     output = bytearray()
     communicate = edge_tts.Communicate(text=text, voice=voice_id)
     async for chunk in communicate.stream():
