@@ -87,6 +87,7 @@ jobs:
               "FIREBASE_PROJECT_ID",
               "FIREBASE_APP_ID",
               "GOOGLE_OAUTH_CLIENT_ID",
+              "GOOGLE_OAUTH_CLIENT_SECRET",
           )
           missing = [name for name in required if not os.getenv(name, "").strip()]
           if missing:
@@ -117,6 +118,7 @@ jobs:
           FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
           FIREBASE_APP_ID: ${{ secrets.FIREBASE_APP_ID }}
           GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
           PRIVACY_POLICY_URL: ${{ vars.PRIVACY_POLICY_URL }}
           APP_SHARE_URL: ${{ vars.APP_SHARE_URL }}
           SUPPORT_EMAIL: ${{ vars.SUPPORT_EMAIL }}
@@ -136,6 +138,7 @@ jobs:
               "FIREBASE_PROJECT_ID",
               "FIREBASE_APP_ID",
               "GOOGLE_OAUTH_CLIENT_ID",
+              "GOOGLE_OAUTH_CLIENT_SECRET",
               "PRIVACY_POLICY_URL",
               "APP_SHARE_URL",
               "SUPPORT_EMAIL",
@@ -176,6 +179,12 @@ jobs:
           missing = [name for name in required if not os.getenv(name, "").strip()]
           if missing:
               raise SystemExit("The generated .env did not load: " + ", ".join(missing))
+          client_id = os.getenv("GOOGLE_OAUTH_CLIENT_ID", "").strip()
+          client_secret = os.getenv("GOOGLE_OAUTH_CLIENT_SECRET", "").strip()
+          if not client_id.endswith(".apps.googleusercontent.com"):
+              raise SystemExit("GOOGLE_OAUTH_CLIENT_ID is not a Google web client ID.")
+          if len(client_secret) < 12:
+              raise SystemExit("GOOGLE_OAUTH_CLIENT_SECRET is invalid or incomplete.")
           print("Build configuration loaded successfully.")
           PY
 
@@ -192,6 +201,40 @@ jobs:
           mkdir -p release
           cp "$apk_path" release/AI_Master_Pro.apk
           echo "APK collected at release/AI_Master_Pro.apk"
+
+      - name: Verify APK payload and startup exclusions
+        run: |
+          python - <<'PY'
+          import io
+          from pathlib import Path
+          from zipfile import ZipFile
+
+          apk = Path("release/AI_Master_Pro.apk")
+          if not apk.is_file() or apk.stat().st_size < 1_000_000:
+              raise SystemExit("The APK is missing or unexpectedly small.")
+          with ZipFile(apk) as outer:
+              app_zip_name = "assets/flutter_assets/app/app.zip"
+              if app_zip_name not in outer.namelist():
+                  raise SystemExit("The APK does not contain the packaged Python app.")
+              app_payload = outer.read(app_zip_name)
+          with ZipFile(io.BytesIO(app_payload)) as inner:
+              names = set(inner.namelist())
+              blocked = (".git/", ".github/", ".venv/", "tests/", "extensions/")
+              leaked = sorted(name for name in names if name.startswith(blocked))
+              if leaked:
+                  raise SystemExit("Development files leaked into app.zip: " + leaked[0])
+              if ".env" not in names:
+                  raise SystemExit("The runtime configuration is missing from app.zip.")
+              env_text = inner.read(".env").decode("utf-8")
+              for required in (
+                  "FIREBASE_API_KEY=",
+                  "GOOGLE_OAUTH_CLIENT_ID=",
+                  "GOOGLE_OAUTH_CLIENT_SECRET=",
+              ):
+                  if required not in env_text:
+                      raise SystemExit(f"Missing runtime setting: {required[:-1]}")
+          print(f"APK payload verified ({apk.stat().st_size} bytes).")
+          PY
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4

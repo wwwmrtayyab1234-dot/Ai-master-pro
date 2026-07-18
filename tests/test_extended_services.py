@@ -203,6 +203,22 @@ class ProviderBoundaryTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("providerId=google.com", payload["postBody"])
         self.assertTrue(payload["returnSecureToken"])
 
+    def test_password_reset_confirms_recipient_and_requests_english_email(self) -> None:
+        service = FirebaseAuthService()
+        with patch.object(
+            service, "_post", return_value={"email": "person@example.com"}
+        ) as post:
+            result = service.send_password_reset(" Person@Example.com ")
+        self.assertEqual(result, "person@example.com")
+        self.assertEqual(post.call_args.args[0], "sendOobCode")
+        self.assertEqual(
+            post.call_args.args[1],
+            {"requestType": "PASSWORD_RESET", "email": "person@example.com"},
+        )
+        self.assertEqual(
+            post.call_args.kwargs["headers"], {"X-Firebase-Locale": "en"}
+        )
+
     def test_gemini_response_and_preflight_validation(self) -> None:
         response = {"candidates": [{"content": {"parts": [{"text": "Result"}]}}]}
         self.assertEqual(_extract_text(response), "Result")
@@ -327,7 +343,8 @@ class PackagingConfigurationTests(unittest.TestCase):
         self.assertNotIn("import flet_audio_recorder", first_frame)
         self.assertNotIn("import flet_secure_storage", first_frame)
         self.assertNotIn("from config import", first_frame)
-        self.assertNotIn("port=8550", main_source)
+        self.assertIn('port=8550', main_source)
+        self.assertNotIn("from flet.auth.providers import GoogleOAuthProvider", first_frame)
 
         flet_config = tomllib.loads(
             (root / "pyproject.toml").read_text(encoding="utf-8")
@@ -335,11 +352,19 @@ class PackagingConfigurationTests(unittest.TestCase):
         self.assertNotIn("boot_screen", flet_config["app"])
         self.assertEqual(flet_config["boot_screen"]["name"], "flet")
         self.assertEqual(flet_config["boot_screen"]["flet"]["spinner_size"], 0)
+        excluded = set(flet_config["app"]["exclude"])
+        self.assertTrue({".git", ".github", ".venv", "tests", "extensions"} <= excluded)
 
     def test_android_manifest_and_dependencies(self) -> None:
         root = Path(__file__).resolve().parents[1]
         config = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
         permissions = config["tool"]["flet"]["android"]["permission"]
+        self.assertEqual(
+            config["tool"]["flet"]["android"]["manifest_application"][
+                "usesCleartextTraffic"
+            ],
+            "true",
+        )
         self.assertTrue(permissions["android.permission.INTERNET"])
         self.assertTrue(permissions["android.permission.RECORD_AUDIO"])
         self.assertFalse(permissions["android.permission.CAMERA"])
@@ -372,9 +397,10 @@ class PackagingConfigurationTests(unittest.TestCase):
         self.assertIn("secrets.FIREBASE_API_KEY", workflow)
         self.assertIn("secrets.GROQ_API_KEY", workflow)
         self.assertIn("Verify private configuration loads", workflow)
+        self.assertIn("Verify APK payload and startup exclusions", workflow)
         self.assertIn('Path(".env").unlink(missing_ok=True)', workflow)
         self.assertIn("secrets.GOOGLE_OAUTH_CLIENT_SECRET", workflow)
-        self.assertNotIn('"GOOGLE_OAUTH_CLIENT_SECRET",', workflow)
+        self.assertIn('"GOOGLE_OAUTH_CLIENT_SECRET",', workflow)
         self.assertLess(
             workflow.index("- name: Build Android APK"),
             workflow.index("- name: Clean up private configuration"),
@@ -393,6 +419,7 @@ class PackagingConfigurationTests(unittest.TestCase):
             "FIREBASE_PROJECT_ID": "project-id",
             "FIREBASE_APP_ID": "configured-firebase-app-id",
             "GOOGLE_OAUTH_CLIENT_ID": "configured-google-client-id",
+            "GOOGLE_OAUTH_CLIENT_SECRET": "configured-google-client-secret",
             "GOOGLE_OAUTH_REDIRECT_URL": "http://localhost:8550/oauth_callback",
             "SUPPORT_EMAIL": "support@aimasterpro.test",
             "PRIVACY_POLICY_URL": "https://aimasterpro.test/privacy",

@@ -202,9 +202,12 @@ and create these repository secrets:
 - `GOOGLE_OAUTH_CLIENT_ID`
 - `GOOGLE_OAUTH_CLIENT_SECRET`
 
-The workflow validates all nine entries, but intentionally does not copy
-`GOOGLE_OAUTH_CLIENT_SECRET` into the Android build. A mobile APK is a public
-OAuth client and cannot safely protect a client secret.
+The current development APK copies `GOOGLE_OAUTH_CLIENT_SECRET` into its
+temporary runtime configuration because Flet's built-in authorization-code
+provider requires it. Treat this as a testing build: an APK is a public client
+and cannot safely protect a client secret. Before a Play Store release, replace
+this flow with a native Google/Firebase sign-in extension or a backend token
+exchange and rotate the development OAuth secret.
 
 Under the **Variables** tab, optionally create `PRIVACY_POLICY_URL`,
 `APP_SHARE_URL`, `SUPPORT_EMAIL`, and `WHATSAPP_NUMBER`. The workflow stops

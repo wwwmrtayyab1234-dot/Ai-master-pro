@@ -10,7 +10,6 @@ import flet as ft
 # Flet can dismiss its native boot screen, so native extensions, dotenv and AI
 # provider modules must not be imported here.
 APP_NAME = "AI Master Pro"
-far = None
 fss = None
 TEXT = ft.Colors.ON_SURFACE
 MUTED = ft.Colors.ON_SURFACE_VARIANT
@@ -56,7 +55,7 @@ def prepare_app_data_directory(preferred_support_directory: str | None) -> tuple
 
 
 async def main(page: ft.Page) -> None:
-    global far, fss
+    global fss
 
     page.title = APP_NAME
     page.theme_mode = ft.ThemeMode.LIGHT
@@ -140,23 +139,14 @@ async def main(page: ft.Page) -> None:
         SUPPORT_EMAIL,
         WHATSAPP_NUMBER,
     )
-    import flet_audio as fta
-    from flet.auth.providers import GoogleOAuthProvider
-
     # Native extension imports can delay Android startup if they run before the
-    # first page exists. Load them only after the branded first frame and only
-    # on a platform that can use them.
+    # first page exists. Secure storage is needed for session restore; recorder
+    # and playback extensions are imported only when their feature is tapped.
     is_mobile = page.platform in (
         ft.PagePlatform.ANDROID,
         ft.PagePlatform.IOS,
     )
     if is_mobile:
-        try:
-            import flet_audio_recorder as _far
-
-            far = _far
-        except Exception:
-            far = None
         try:
             import flet_secure_storage as _fss
 
@@ -195,24 +185,11 @@ async def main(page: ft.Page) -> None:
     shared_preferences = ft.SharedPreferences()
     secure_storage = fss.SecureStorage() if fss is not None else None
     audio_recorder = None
-    if far is not None:
-        audio_recorder = far.AudioRecorder(
-            configuration=far.AudioRecorderConfiguration(
-                encoder=far.AudioEncoder.WAV,
-                channels=1,
-                sample_rate=16000,
-                suppress_noise=True,
-                cancel_echo=True,
-                auto_gain=True,
-            )
-        )
     page.services.extend(
         [file_picker, share_service, connectivity, storage_paths, shared_preferences]
     )
     if secure_storage is not None:
         page.services.append(secure_storage)
-    if audio_recorder is not None:
-        page.services.append(audio_recorder)
 
     support_directory: str | None = None
     try:
@@ -268,7 +245,7 @@ async def main(page: ft.Page) -> None:
     current_chat_id: int | None = None
     selected_chat_attachment: dict[str, str] | None = None
     selected_analysis_attachment: dict[str, str] | None = None
-    audio_player: fta.Audio | None = None
+    audio_player = None
     sidebar_open = False
     is_offline = False
     google_oauth_in_progress = False
@@ -687,15 +664,29 @@ async def main(page: ft.Page) -> None:
             toast(friendly_error(error), error=True)
 
     async def toggle_speech_to_text(_event=None) -> None:
-        nonlocal recording_chat_input, recording_path
+        nonlocal audio_recorder, recording_chat_input, recording_path
         if chat_busy:
             return
         if audio_recorder is None:
-            toast(
-                "Speech to text needs the flet-audio-recorder package. Run setup_windows.bat again.",
-                error=True,
-            )
-            return
+            try:
+                import flet_audio_recorder as recorder_module
+
+                audio_recorder = recorder_module.AudioRecorder(
+                    configuration=recorder_module.AudioRecorderConfiguration(
+                        encoder=recorder_module.AudioEncoder.WAV,
+                        channels=1,
+                        sample_rate=16000,
+                        suppress_noise=True,
+                        cancel_echo=True,
+                        auto_gain=True,
+                    )
+                )
+                page.services.append(audio_recorder)
+                page.update()
+            except Exception:
+                audio_recorder = None
+                toast("Speech to text is unavailable on this device.", error=True)
+                return
         try:
             if not recording_chat_input:
                 if not await audio_recorder.has_permission():
@@ -1298,7 +1289,11 @@ async def main(page: ft.Page) -> None:
                     await audio_player.release()
                 except Exception:
                     pass
-            audio_player = fta.Audio(src=audio_bytes, autoplay=False, volume=1.0)
+            import flet_audio as audio_module
+
+            audio_player = audio_module.Audio(
+                src=audio_bytes, autoplay=False, volume=1.0
+            )
             page.services.append(audio_player)
             voice_status.value = (
                 f"Ready: {voice_name}; {actual_seconds} seconds; "
@@ -2038,12 +2033,25 @@ async def main(page: ft.Page) -> None:
             set_login_status("Enter your email to receive a reset link.")
             page.update()
             return
+        forgot_password_button.disabled = True
+        login_busy.visible = True
+        set_login_status()
+        page.update()
         try:
-            await asyncio.to_thread(firebase_auth.send_password_reset, email)
-            set_login_status("Password reset email sent.", error=False)
+            delivered_to = await asyncio.to_thread(
+                firebase_auth.send_password_reset, email
+            )
+            set_login_status(
+                f"Reset link sent to {delivered_to}. Check Inbox and Spam; "
+                "delivery can take up to a minute.",
+                error=False,
+            )
         except Exception as error:
             set_login_status(friendly_error(error))
-        page.update()
+        finally:
+            forgot_password_button.disabled = False
+            login_busy.visible = False
+            page.update()
 
     async def complete_google_oauth(event) -> None:
         nonlocal google_oauth_in_progress
@@ -2089,21 +2097,23 @@ async def main(page: ft.Page) -> None:
         if is_mobile:
             if not GOOGLE_OAUTH_CLIENT_ID or not GOOGLE_OAUTH_CLIENT_SECRET:
                 set_login_status(
-                    "Google sign-in needs GOOGLE_OAUTH_CLIENT_ID and "
-                    "GOOGLE_OAUTH_CLIENT_SECRET in .env."
+                    "Google sign-in is temporarily unavailable. "
+                    "Please use email sign-in."
                 )
                 login_busy.visible = False
                 google_button.disabled = False
                 page.update()
                 return
             try:
+                from flet.auth.providers import GoogleOAuthProvider
+
                 google_oauth_in_progress = True
                 provider = GoogleOAuthProvider(
                     client_id=GOOGLE_OAUTH_CLIENT_ID,
                     client_secret=GOOGLE_OAUTH_CLIENT_SECRET,
                     redirect_url=GOOGLE_OAUTH_REDIRECT_URL,
                 )
-                await page.login(provider)
+                await page.login(provider, scope=["openid", "email", "profile"])
             except Exception as error:
                 google_oauth_in_progress = False
                 login_busy.visible = False
@@ -2165,6 +2175,9 @@ async def main(page: ft.Page) -> None:
         height=54,
         on_click=google_sign_in,
     )
+    forgot_password_button = ft.TextButton(
+        "Forgot password?", on_click=forgot_password
+    )
     login_card = ft.Container(
         content=ft.Column(
             controls=[
@@ -2195,7 +2208,7 @@ async def main(page: ft.Page) -> None:
                 ft.Row(
                     controls=[
                         ft.Container(expand=True),
-                        ft.TextButton("Forgot password?", on_click=forgot_password),
+                        forgot_password_button,
                     ]
                 ),
                 login_status,
@@ -2342,7 +2355,7 @@ async def main(page: ft.Page) -> None:
                         icon=ft.Icons.REFRESH,
                         bgcolor=PRIMARY,
                         color=WHITE,
-                        on_click=lambda _e: page.run_task(bootstrap),
+                        on_click=lambda _e: page.run_task(bootstrap, True),
                     ),
                 ],
                 spacing=16,
@@ -2376,7 +2389,7 @@ async def main(page: ft.Page) -> None:
                         icon=ft.Icons.REFRESH,
                         bgcolor=PRIMARY,
                         color=WHITE,
-                        on_click=lambda _e: page.run_task(bootstrap),
+                        on_click=lambda _e: page.run_task(bootstrap, True),
                     ),
                 ],
                 spacing=18,
@@ -2463,8 +2476,9 @@ async def main(page: ft.Page) -> None:
             # to login. The cached secure session remains available locally.
             return
 
-    async def bootstrap() -> None:
-        show_startup()
+    async def bootstrap(show_progress: bool = False) -> None:
+        if show_progress:
+            show_startup()
         try:
             saved = await asyncio.wait_for(session_store.load(), timeout=4.0)
         except Exception:
@@ -2517,7 +2531,7 @@ async def main(page: ft.Page) -> None:
         if is_offline and current_user is None:
             show_offline()
         elif not is_offline and root.content is offline_screen:
-            page.run_task(bootstrap)
+            page.run_task(bootstrap, True)
         else:
             page.update()
 
@@ -2537,7 +2551,7 @@ async def main(page: ft.Page) -> None:
 
     refresh_usage_ui()
     resize_layout()
-    await bootstrap()
+    await bootstrap(False)
     if database_recovery_backup is not None:
         toast(
             "Local storage was repaired safely. A recovery backup was kept.",
@@ -2551,6 +2565,6 @@ async def main(page: ft.Page) -> None:
 
 
 if __name__ == "__main__":
-    # Let Flet select the embedded transport/port. A hard-coded TCP port can
-    # conflict with another process and prevent Android from creating a page.
-    ft.run(main, assets_dir="assets")
+    # Flet OAuth callbacks require the same fixed port registered in Google
+    # Cloud. This works for desktop, web and the mobile in-app auth browser.
+    ft.run(main, assets_dir="assets", port=8550)

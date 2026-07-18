@@ -1,6 +1,6 @@
 [project]
 name = "ai_master_pro"
-version = "0.9.8"
+version = "0.9.9"
 description = "All-in-one AI studio for creators"
 requires-python = ">=3.11"
 dependencies = [
@@ -18,7 +18,7 @@ dependencies = [
 product = "AI Master Pro"
 org = "com.aimasterpro"
 bundle_id = "com.aimasterpro.app"
-build_number = 19
+build_number = 20
 
 [tool.flet.dev_packages]
 flet-admob-pro = "extensions/flet_admob_pro"
@@ -26,6 +26,25 @@ flet-admob-pro = "extensions/flet_admob_pro"
 [tool.flet.app]
 path = "."
 module = "main.py"
+exclude = [
+    ".git",
+    ".github",
+    ".vscode",
+    ".venv",
+    "__pycache__",
+    "tests",
+    "extensions",
+    "audio_exports",
+    "recordings",
+    "README.md",
+    "PRIVACY_POLICY_DEPLOYMENT.md",
+    "privacy_policy.html",
+    "delete_account.html",
+    "build_android_apk.bat",
+    "build_play_store_aab.bat",
+    "run_app.bat",
+    "setup_windows.bat",
+]
 
 [tool.flet.boot_screen]
 name = "flet"
@@ -47,7 +66,9 @@ target_sdk_version = 35
 adaptive_icon_background = "#EEF4FF"
 
 [tool.flet.android.manifest_application]
-usesCleartextTraffic = "false"
+# Flet's mobile OAuth callback is http://localhost:8550/oauth_callback.
+# Android must allow that local callback or Google sign-in cannot return.
+usesCleartextTraffic = "true"
 allowBackup = "false"
 
 [tool.flet.android.meta_data]

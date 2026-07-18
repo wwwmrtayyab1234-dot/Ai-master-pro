@@ -43,6 +43,7 @@ def validate_release(root: Path | None = None) -> list[str]:
         "FIREBASE_PROJECT_ID": os.getenv("FIREBASE_PROJECT_ID", ""),
         "FIREBASE_APP_ID": os.getenv("FIREBASE_APP_ID", ""),
         "GOOGLE_OAUTH_CLIENT_ID": os.getenv("GOOGLE_OAUTH_CLIENT_ID", ""),
+        "GOOGLE_OAUTH_CLIENT_SECRET": os.getenv("GOOGLE_OAUTH_CLIENT_SECRET", ""),
         "SUPPORT_EMAIL": os.getenv("SUPPORT_EMAIL", ""),
     }
     for name, value in required_values.items():

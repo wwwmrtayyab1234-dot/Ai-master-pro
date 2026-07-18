@@ -94,14 +94,22 @@ class FirebaseAuthService:
             return SessionExpired(messages[code])
         return RuntimeError(messages.get(code, MAINTENANCE_MESSAGE))
 
-    def _post(self, endpoint: str, payload: dict, timeout: int = 25) -> dict:
+    def _post(
+        self,
+        endpoint: str,
+        payload: dict,
+        timeout: int = 25,
+        headers: dict[str, str] | None = None,
+    ) -> dict:
         api_key = os.getenv("FIREBASE_API_KEY")
         if not api_key:
             raise RuntimeError("Firebase is not configured. Add FIREBASE_API_KEY to .env.")
+        request_headers = {"Content-Type": "application/json"}
+        request_headers.update(headers or {})
         request = Request(
             f"{self.BASE_URL}:{endpoint}?key={api_key}",
             data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
+            headers=request_headers,
             method="POST",
         )
         try:
@@ -156,11 +164,18 @@ class FirebaseAuthService:
     def send_email_verification(self, id_token: str) -> None:
         self._post("sendOobCode", {"requestType": "VERIFY_EMAIL", "idToken": id_token})
 
-    def send_password_reset(self, email: str) -> None:
-        self._post(
+    def send_password_reset(self, email: str) -> str:
+        """Request an English Firebase reset email and confirm its recipient."""
+        clean_email = self.validate_email(email)
+        response = self._post(
             "sendOobCode",
-            {"requestType": "PASSWORD_RESET", "email": self.validate_email(email)},
+            {"requestType": "PASSWORD_RESET", "email": clean_email},
+            headers={"X-Firebase-Locale": "en"},
         )
+        returned_email = str(response.get("email", clean_email)).strip().lower()
+        if returned_email != clean_email:
+            raise RuntimeError(MAINTENANCE_MESSAGE)
+        return clean_email
 
     def refresh_session(self, refresh_token: str, email_hint: str = "") -> FirebaseUser:
         api_key = os.getenv("FIREBASE_API_KEY")
