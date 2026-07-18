@@ -31,8 +31,6 @@ jobs:
       PYTHONUTF8: "1"
       PYTHONUNBUFFERED: "1"
       PIP_DISABLE_PIP_VERSION_CHECK: "1"
-      PUB_CACHE: ${{ runner.temp }}/pub-cache
-      GRADLE_USER_HOME: ${{ runner.temp }}/gradle
 
     steps:
       - name: Check out repository
@@ -58,9 +56,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            ${{ env.GRADLE_USER_HOME }}/caches
-            ${{ env.GRADLE_USER_HOME }}/wrapper
-            ${{ env.PUB_CACHE }}
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            ~/.pub-cache
           key: ${{ runner.os }}-android-${{ hashFiles('requirements.txt', 'pyproject.toml', 'extensions/**/pubspec.yaml') }}
           restore-keys: |
             ${{ runner.os }}-android-
@@ -89,7 +87,6 @@ jobs:
               "FIREBASE_PROJECT_ID",
               "FIREBASE_APP_ID",
               "GOOGLE_OAUTH_CLIENT_ID",
-              "GOOGLE_OAUTH_CLIENT_SECRET",
           )
           missing = [name for name in required if not os.getenv(name, "").strip()]
           if missing:
@@ -182,7 +179,7 @@ jobs:
           print("Build configuration loaded successfully.")
           PY
 
-      - name: Build Android APK with Flet
+      - name: Build Android APK
         run: flet build apk --clear-cache --yes --no-rich-output
 
       - name: Collect APK
@@ -204,7 +201,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: Remove temporary secrets
+      - name: Clean up private configuration
         if: always()
         run: |
           python - <<'PY'
