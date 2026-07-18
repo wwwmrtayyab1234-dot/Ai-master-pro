@@ -324,6 +324,17 @@ class PackagingConfigurationTests(unittest.TestCase):
         )[0]
         self.assertNotIn("ProgressRing", first_frame)
         self.assertNotIn("ProgressRing", startup)
+        self.assertNotIn("import flet_audio_recorder", first_frame)
+        self.assertNotIn("import flet_secure_storage", first_frame)
+        self.assertNotIn("from config import", first_frame)
+        self.assertNotIn("port=8550", main_source)
+
+        flet_config = tomllib.loads(
+            (root / "pyproject.toml").read_text(encoding="utf-8")
+        )["tool"]["flet"]
+        self.assertNotIn("boot_screen", flet_config["app"])
+        self.assertEqual(flet_config["boot_screen"]["name"], "flet")
+        self.assertEqual(flet_config["boot_screen"]["flet"]["spinner_size"], 0)
 
     def test_android_manifest_and_dependencies(self) -> None:
         root = Path(__file__).resolve().parents[1]

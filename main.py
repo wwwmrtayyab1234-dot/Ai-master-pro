@@ -1,39 +1,17 @@
 from __future__ import annotations
 
 import asyncio
-import base64
-from datetime import datetime
 from pathlib import Path
 from tempfile import gettempdir
 
 import flet as ft
 
-# These two lightweight extension modules stay visible at module scope so the
-# startup smoke test can replace their native storage/recorder calls safely.
-# Provider SDKs such as Groq and Edge-TTS remain lazy-loaded.
-try:
-    import flet_audio_recorder as far
-except ImportError:
-    far = None
-
-try:
-    import flet_secure_storage as fss
-except ImportError:
-    fss = None
-
-from config import (
-    ADS_FOR_REQUEST_REFILL,
-    AD_REQUEST_REFILL,
-    AD_REWARD_CREDITS,
-    APP_NAME,
-    APP_SHARE_URL,
-    GOOGLE_OAUTH_CLIENT_ID,
-    GOOGLE_OAUTH_CLIENT_SECRET,
-    GOOGLE_OAUTH_REDIRECT_URL,
-    PRIVACY_POLICY_URL,
-    SUPPORT_EMAIL,
-    WHATSAPP_NUMBER,
-)
+# Keep the entry module intentionally small. Android imports this module before
+# Flet can dismiss its native boot screen, so native extensions, dotenv and AI
+# provider modules must not be imported here.
+APP_NAME = "AI Master Pro"
+far = None
+fss = None
 TEXT = ft.Colors.ON_SURFACE
 MUTED = ft.Colors.ON_SURFACE_VARIANT
 BACKGROUND = ft.Colors.SURFACE
@@ -78,6 +56,8 @@ def prepare_app_data_directory(preferred_support_directory: str | None) -> tuple
 
 
 async def main(page: ft.Page) -> None:
+    global far, fss
+
     page.title = APP_NAME
     page.theme_mode = ft.ThemeMode.LIGHT
     page.bgcolor = BACKGROUND
@@ -145,8 +125,44 @@ async def main(page: ft.Page) -> None:
     # Optional and provider-specific packages are intentionally imported only
     # after the first frame is visible. Groq and Edge-TTS perform their own
     # provider imports lazily on first use as well.
+    import base64
+    from datetime import datetime
+
+    from config import (
+        ADS_FOR_REQUEST_REFILL,
+        AD_REQUEST_REFILL,
+        AD_REWARD_CREDITS,
+        APP_SHARE_URL,
+        GOOGLE_OAUTH_CLIENT_ID,
+        GOOGLE_OAUTH_CLIENT_SECRET,
+        GOOGLE_OAUTH_REDIRECT_URL,
+        PRIVACY_POLICY_URL,
+        SUPPORT_EMAIL,
+        WHATSAPP_NUMBER,
+    )
     import flet_audio as fta
     from flet.auth.providers import GoogleOAuthProvider
+
+    # Native extension imports can delay Android startup if they run before the
+    # first page exists. Load them only after the branded first frame and only
+    # on a platform that can use them.
+    is_mobile = page.platform in (
+        ft.PagePlatform.ANDROID,
+        ft.PagePlatform.IOS,
+    )
+    if is_mobile:
+        try:
+            import flet_audio_recorder as _far
+
+            far = _far
+        except Exception:
+            far = None
+        try:
+            import flet_secure_storage as _fss
+
+            fss = _fss
+        except Exception:
+            fss = None
 
     from services.ad_service import create_native_ad, watch_rewarded_ad
     from services.crash_service import CrashProtector
@@ -200,7 +216,9 @@ async def main(page: ft.Page) -> None:
 
     support_directory: str | None = None
     try:
-        support_directory = await storage_paths.get_application_support_directory()
+        support_directory = await asyncio.wait_for(
+            storage_paths.get_application_support_directory(), timeout=2.0
+        )
     except Exception:
         support_directory = None
     app_data_directory, storage_fallback_used = prepare_app_data_directory(
@@ -2533,4 +2551,6 @@ async def main(page: ft.Page) -> None:
 
 
 if __name__ == "__main__":
-    ft.run(main, assets_dir="assets", port=8550)
+    # Let Flet select the embedded transport/port. A hard-coded TCP port can
+    # conflict with another process and prevent Android from creating a page.
+    ft.run(main, assets_dir="assets")

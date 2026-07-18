@@ -1,6 +1,6 @@
 [project]
 name = "ai_master_pro"
-version = "0.9.7"
+version = "0.9.8"
 description = "All-in-one AI studio for creators"
 requires-python = ">=3.11"
 dependencies = [
@@ -18,7 +18,7 @@ dependencies = [
 product = "AI Master Pro"
 org = "com.aimasterpro"
 bundle_id = "com.aimasterpro.app"
-build_number = 18
+build_number = 19
 
 [tool.flet.dev_packages]
 flet-admob-pro = "extensions/flet_admob_pro"
@@ -27,13 +27,19 @@ flet-admob-pro = "extensions/flet_admob_pro"
 path = "."
 module = "main.py"
 
-[tool.flet.app.boot_screen]
-show = true
-message = "Preparing AI Master Pro..."
+[tool.flet.boot_screen]
+name = "flet"
 
-[tool.flet.app.startup_screen]
-show = true
-message = "Starting AI Master Pro..."
+[tool.flet.boot_screen.flet]
+theme_mode = "light"
+bgcolor_light = "#F7FAFF"
+bgcolor_dark = "#F7FAFF"
+spinner_size = 0
+text_color_light = "#1E2A44"
+text_color_dark = "#1E2A44"
+prepare_message = ""
+startup_message = ""
+fade_out_duration = 120
 
 [tool.flet.android]
 min_sdk_version = 24
